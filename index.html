@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corrosion Detection Monitoring System</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
+            --light-bg: #ecf0f1;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+        
+        .dashboard-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            margin: 20px auto;
+            padding: 30px;
+        }
+        
+        .header {
+            border-bottom: 3px solid var(--primary-color);
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card-header {
+            background: var(--primary-color);
+            color: white;
+            border-radius: 15px 15px 0 0 !important;
+            font-weight: 600;
+        }
+        
+        .sensor-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        
+        .sensor-unit {
+            font-size: 1rem;
+            color: #7f8c8d;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        
+        .status-normal { background-color: var(--success-color); }
+        .status-warning { background-color: var(--warning-color); }
+        .status-alert { background-color: var(--danger-color); }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+        
+        .fault-log {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .fault-item {
+            border-left: 4px solid var(--danger-color);
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            background: #f8f9fa;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .last-updated {
+            font-size: 0.9rem;
+            color: #7f8c8d;
+        }
+        
+        .sensor-card {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .sensor-icon {
+            font-size: 2.5rem;
+            color: var(--secondary-color);
+            margin-bottom: 15px;
+        }
+
+        .progress {
+            height: 8px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="dashboard-container">
+            <!-- Header -->
+            <div class="header text-center">
+                <h1 class="display-4 fw-bold text-dark mb-3">
+                    <i class="fas fa-shield-alt text-primary me-3"></i>
+                    Corrosion Detection Monitoring System
+                </h1>
+                <p class="lead text-muted">Real-time Structural Health Monitoring Dashboard</p>
+            </div>
+
+            <!-- System Status -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-heartbeat me-2"></i>System Status</span>
+                            <span class="last-updated" id="lastUpdated">Last Updated: --</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="row text-center">
+                                <div class="col-md-3">
+                                    <span class="status-indicator status-normal"></span>
+                                    <strong>Live Data</strong>
+                                    <div class="sensor-value" id="statusLive">Active</div>
+                                </div>
+                                <div class="col-md-3">
+                                    <span class="status-indicator" id="statusBaselineIndicator"></span>
+                                    <strong>Baseline</strong>
+                                    <div class="sensor-value" id="statusBaseline">Not Set</div>
+                                </div>
+                                <div class="col-md-3">
+                                    <span class="status-indicator status-normal" id="statusAlertIndicator"></span>
+                                    <strong>Alerts</strong>
+                                    <div class="sensor-value" id="statusAlerts">0</div>
+                                </div>
+                                <div class="col-md-3">
+                                    <span class="status-indicator status-normal"></span>
+                                    <strong>Uptime</strong>
+                                    <div class="sensor-value" id="statusUptime">100%</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Current Sensor Readings -->
+            <div class="row mb-4">
+                <div class="col-md-2 col-6">
+                    <div class="card sensor-card">
+                        <div class="sensor-icon">
+                            <i class="fas fa-bolt"></i>
+                        </div>
+                        <h5>Flex Sensor</h5>
+                        <div class="sensor-value" id="flexValue">--</div>
+                        <small class="sensor-unit">%</small>
+                        <div class="progress">
+                            <div id="flexProgress" class="progress-bar bg-info" role="progressbar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2 col-6">
+                    <div class="card sensor-card">
+                        <div class="sensor-icon">
+                            <i class="fas fa-tint"></i>
+                        </div>
+                        <h5>Moisture</h5>
+                        <div class="sensor-value" id="moistureValue">--</div>
+                        <small class="sensor-unit">%</small>
+                        <div class="progress">
+                            <div id="moistureProgress" class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2 col-6">
+                    <div class="card sensor-card">
+                        <div class="sensor-icon">
+                            <i class="fas fa-thermometer-half"></i>
+                        </div>
+                        <h5>Temperature</h5>
+                        <div class="sensor-value" id="tempValue">--</div>
+                        <small class="sensor-unit">°C</small>
+                    </div>
+                </div>
+                <div class="col-md-2 col-6">
+                    <div class="card sensor-card">
+                        <div class="sensor-icon">
+                            <i class="fas fa-percentage"></i>
+                        </div>
+                        <h5>Humidity</h5>
+                        <div class="sensor-value" id="humidityValue">--</div>
+                        <small class="sensor-unit">%</small>
+                        <div class="progress">
+                            <div id="humidityProgress" class="progress-bar bg-primary" role="progressbar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2 col-6">
+                    <div class="card sensor-card">
+                        <div class="sensor-icon">
+                            <i class="fas fa-resistance"></i>
+                        </div>
+                        <h5>Resistance</h5>
+                        <div class="sensor-value" id="resistanceValue">--</div>
+                        <small class="sensor-unit">Ω</small>
+                    </div>
+                </div>
+                <div class="col-md-2 col-6">
+                    <div class="card sensor-card">
+                        <div class="sensor-icon">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <h5>Last Update</h5>
+                        <div class="sensor-value" id="updateTime">--</div>
+                        <small class="sensor-unit">Seconds ago</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-chart-line me-2"></i>Sensor Trends - Last 30 Readings
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="sensorChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-chart-bar me-2"></i>Current vs Baseline Comparison (%)
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="comparisonChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fault Logs -->
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-exclamation-triangle me-2"></i>Fault Logs & Alerts</span>
+                            <button class="btn btn-sm btn-outline-danger" onclick="clearFaultLogs()">
+                                <i class="fas fa-trash me-1"></i>Clear Logs
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="fault-log" id="faultLogContainer">
+                                <div class="text-center text-muted py-4" id="noFaultsMessage">
+                                    <i class="fas fa-check-circle fa-2x mb-3 text-success"></i>
+                                    <p>No fault logs found. System operating normally.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            databaseURL: "https://corrosion-detection-in-rcc-default-rtdb.asia-southeast1.firebasedatabase.app/"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // Data arrays for charts
+        let timeLabels = [];
+        let flexData = [];
+        let moistureData = [];
+        let temperatureData = [];
+        let resistanceData = [];
+        let humidityData = [];
+        const maxDataPoints = 30;
+
+        // ESP32 ADC range (12-bit: 0-4095)
+        const ADC_MAX = 4095;
+        const ADC_MIN = 0;
+
+        // Chart instances
+        let sensorChart, comparisonChart;
+
+        // Convert ADC value to percentage (0-100%)
+        function adcToPercentage(adcValue) {
+            // Ensure the value is within ADC range
+            const clampedValue = Math.max(ADC_MIN, Math.min(ADC_MAX, adcValue));
+            // Convert to percentage
+            return ((clampedValue - ADC_MIN) / (ADC_MAX - ADC_MIN)) * 100;
+        }
+
+        // Initialize charts
+        function initializeCharts() {
+            // Sensor Trends Chart
+            const sensorCtx = document.getElementById('sensorChart').getContext('2d');
+            sensorChart = new Chart(sensorCtx, {
+                type: 'line',
+                data: {
+                    labels: timeLabels,
+                    datasets: [
+                        {
+                            label: 'Flex Sensor (%)',
+                            data: flexData,
+                            borderColor: '#3498db',
+                            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                            tension: 0.4,
+                            fill: true,
+                            yAxisID: 'yPercentage'
+                        },
+                        {
+                            label: 'Moisture (%)',
+                            data: moistureData,
+                            borderColor: '#9b59b6',
+                            backgroundColor: 'rgba(155, 89, 182, 0.1)',
+                            tension: 0.4,
+                            fill: true,
+                            yAxisID: 'yPercentage'
+                        },
+                        {
+                            label: 'Temperature (°C)',
+                            data: temperatureData,
+                            borderColor: '#e74c3c',
+                            backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                            tension: 0.4,
+                            fill: true,
+                            yAxisID: 'yTemperature'
+                        },
+                        {
+                            label: 'Humidity (%)',
+                            data: humidityData,
+                            borderColor: '#2ecc71',
+                            backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                            tension: 0.4,
+                            fill: true,
+                            yAxisID: 'yPercentage'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        yPercentage: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'Percentage (%)'
+                            },
+                            min: 0,
+                            max: 100
+                        },
+                        yTemperature: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: 'Temperature (°C)'
+                            },
+                            grid: {
+                                drawOnChartArea: false
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: 'Real-time Sensor Data'
+                        }
+                    }
+                }
+            });
+
+            // Comparison Chart
+            const comparisonCtx = document.getElementById('comparisonChart').getContext('2d');
+            comparisonChart = new Chart(comparisonCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Flex (%)', 'Moisture (%)', 'Humidity (%)', 'Resistance'],
+                    datasets: [
+                        {
+                            label: 'Current',
+                            data: [0, 0, 0, 0],
+                            backgroundColor: 'rgba(52, 152, 219, 0.8)'
+                        },
+                        {
+                            label: 'Baseline',
+                            data: [0, 0, 0, 0],
+                            backgroundColor: 'rgba(46, 204, 113, 0.8)'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Values'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: 'Current vs Baseline Comparison'
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update sensor data arrays
+        function updateSensorData(timestamp, data) {
+            const time = new Date().toLocaleTimeString();
+            
+            // Convert ADC values to percentage for flex and moisture
+            const flexPercentage = adcToPercentage(data.flex_sensor);
+            const moisturePercentage = adcToPercentage(data.moisture_level);
+            
+            // Add new data
+            timeLabels.push(time);
+            flexData.push(flexPercentage);
+            moistureData.push(moisturePercentage);
+            temperatureData.push(data.temperature_c);
+            resistanceData.push(data.resistance_ohms);
+            humidityData.push(data.humidity_percent);
+
+            // Keep only last maxDataPoints
+            if (timeLabels.length > maxDataPoints) {
+                timeLabels.shift();
+                flexData.shift();
+                moistureData.shift();
+                temperatureData.shift();
+                resistanceData.shift();
+                humidityData.shift();
+            }
+
+            // Update charts
+            sensorChart.update();
+            
+            // Update comparison chart if baseline exists
+            if (data.has_baseline) {
+                // Convert baseline values to percentage
+                const baselineFlexPercentage = adcToPercentage(data.baseline_flex);
+                const baselineMoisturePercentage = adcToPercentage(data.baseline_moisture);
+                
+                comparisonChart.data.datasets[0].data = [
+                    flexPercentage,
+                    moisturePercentage,
+                    data.humidity_percent,
+                    data.resistance_ohms
+                ];
+                comparisonChart.data.datasets[1].data = [
+                    baselineFlexPercentage,
+                    baselineMoisturePercentage,
+                    data.baseline_humidity || 0,
+                    data.baseline_resistance
+                ];
+                comparisonChart.update();
+            }
+        }
+
+        // Update display with live data
+        function updateDisplay(data) {
+            // Convert ADC values to percentage
+            const flexPercentage = adcToPercentage(data.flex_sensor);
+            const moisturePercentage = adcToPercentage(data.moisture_level);
+            
+            // Update sensor values with percentage
+            document.getElementById('flexValue').textContent = flexPercentage.toFixed(1);
+            document.getElementById('moistureValue').textContent = moisturePercentage.toFixed(1);
+            document.getElementById('tempValue').textContent = data.temperature_c.toFixed(1);
+            document.getElementById('humidityValue').textContent = data.humidity_percent.toFixed(1);
+            document.getElementById('resistanceValue').textContent = data.resistance_ohms.toFixed(0);
+            
+            // Update progress bars
+            document.getElementById('flexProgress').style.width = flexPercentage + '%';
+            document.getElementById('moistureProgress').style.width = moisturePercentage + '%';
+            document.getElementById('humidityProgress').style.width = data.humidity_percent + '%';
+            
+            // Update status
+            document.getElementById('lastUpdated').textContent = `Last Updated: ${data.timestamp}`;
+            document.getElementById('updateTime').textContent = '0';
+            
+            // Update baseline status
+            if (data.has_baseline) {
+                document.getElementById('statusBaseline').textContent = 'Set';
+                document.getElementById('statusBaselineIndicator').className = 'status-indicator status-normal';
+            } else {
+                document.getElementById('statusBaseline').textContent = 'Not Set';
+                document.getElementById('statusBaselineIndicator').className = 'status-indicator status-warning';
+            }
+
+            // Update sensor data arrays for charts
+            updateSensorData(data.timestamp, data);
+        }
+
+        // Add fault log to display
+        function addFaultLog(faultData) {
+            const container = document.getElementById('faultLogContainer');
+            const noFaultsMessage = document.getElementById('noFaultsMessage');
+            
+            if (noFaultsMessage) {
+                noFaultsMessage.style.display = 'none';
+            }
+
+            const faultItem = document.createElement('div');
+            faultItem.className = 'fault-item';
+            faultItem.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <strong><i class="fas fa-exclamation-circle text-danger me-2"></i>Alert Triggered</strong>
+                        <p class="mb-1 mt-2">${faultData.Alert_Message || 'Significant deviation detected'}</p>
+                        <small class="text-muted">Timestamp: ${faultData.Timestamp}</small>
+                    </div>
+                    <div class="text-end">
+                        <small class="text-danger">CRITICAL</small>
+                    </div>
+                </div>
+            `;
+
+            container.insertBefore(faultItem, container.firstChild);
+            
+            // Update alert count
+            const currentAlerts = parseInt(document.getElementById('statusAlerts').textContent) || 0;
+            document.getElementById('statusAlerts').textContent = currentAlerts + 1;
+            document.getElementById('statusAlertIndicator').className = 'status-indicator status-alert';
+        }
+
+        // Clear fault logs
+        function clearFaultLogs() {
+            if (confirm('Are you sure you want to clear all fault logs?')) {
+                const container = document.getElementById('faultLogContainer');
+                container.innerHTML = `
+                    <div class="text-center text-muted py-4" id="noFaultsMessage">
+                        <i class="fas fa-check-circle fa-2x mb-3 text-success"></i>
+                        <p>No fault logs found. System operating normally.</p>
+                    </div>
+                `;
+                document.getElementById('statusAlerts').textContent = '0';
+                document.getElementById('statusAlertIndicator').className = 'status-indicator status-normal';
+            }
+        }
+
+        // Initialize and start listening to Firebase
+        function initializeApp() {
+            initializeCharts();
+            
+            // Listen to live data
+            const liveDataRef = database.ref('live_data');
+            liveDataRef.on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    updateDisplay(data);
+                }
+            });
+
+            // Listen to fault logs
+            const faultLogsRef = database.ref('Fault_Logs');
+            faultLogsRef.on('child_added', (snapshot) => {
+                const faultData = snapshot.val();
+                addFaultLog(faultData);
+            });
+
+            // Load existing fault logs
+            faultLogsRef.once('value').then((snapshot) => {
+                const faults = snapshot.val();
+                if (faults) {
+                    Object.values(faults).forEach(fault => addFaultLog(fault));
+                }
+            });
+
+            // Update uptime counter
+            setInterval(() => {
+                const updateTimeElement = document.getElementById('updateTime');
+                let seconds = parseInt(updateTimeElement.textContent) || 0;
+                updateTimeElement.textContent = seconds + 2;
+            }, 2000);
+        }
+
+        // Start the application when page loads
+        document.addEventListener('DOMContentLoaded', initializeApp);
+    </script>
+</body>
+</html>
